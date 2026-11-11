@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日語 RPG 學習神作：記憶魔法師</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .pixel-corners {
+            image-rendering: pixelated;
+        }
+        .card-flip {
+            perspective: 1000px;
+        }
+        .card-inner {
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .card-flip.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            backface-visibility: hidden;
+        }
+        .card-back {
+            transform: rotateY(180deg);
+        }
+        @keyframes damage-pop {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            50% { transform: translateY(-20px) scale(1.3); }
+            100% { opacity: 0; transform: translateY(-40px) scale(1); }
+        }
+        .damage-float {
+            animation: damage-pop 0.8s ease-out forwards;
+        }
+        .shake {
+            animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white font-sans min-h-screen flex flex-col">
+
+    <!-- Header / Status Bar -->
+    <header class="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-50 shadow-lg">
+        <div class="max-w-4xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-2xl font-bold border-2 border-indigo-400">
+                    🧙‍♂️
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-indigo-300">勇者背單字 <span id="player-title" class="text-xs bg-indigo-900 text-indigo-200 px-2 py-0.5 rounded border border-indigo-500">見習魔法師</span></h1>
+                    <div class="flex items-center space-x-2 text-xs text-slate-300 mt-1">
+                        <span>Lv.<span id="player-level">1</span></span>
+                        <div class="w-24 bg-slate-700 h-2 rounded-full overflow-hidden">
+                            <div id="player-exp-bar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Badge -->
+            <div class="flex items-center space-x-4 bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-700">
+                <div class="flex items-center space-x-1 text-amber-400">
+                    <i class="fa-solid fa-coins"></i>
+                    <span id="player-gold" class="font-bold">100</span>
+                </div>
+                <div class="flex items-center space-x-1 text-red-400">
+                    <i class="fa-solid fa-heart"></i>
+                    <span id="player-hp">100</span>/<span id="player-max-hp">100</span>
+                </div>
+                <div class="flex items-center space-x-1 text-purple-400 cursor-pointer" onclick="openSrsModal()">
+                    <i class="fa-solid fa-brain"></i>
+                    <span id="srs-count" class="font-bold">0</span> 錯題
+                </div>
+            </div>
+
+            <!-- Pet Banner -->
+            <div id="active-pet" class="hidden md:flex items-center space-x-2 bg-indigo-950/60 border border-indigo-800 px-3 py-1.5 rounded-lg text-xs">
+                <span id="pet-icon" class="text-xl">🐕</span>
+                <div>
+                    <div id="pet-name" class="font-bold text-indigo-300">柴犬夥伴</div>
+                    <div id="pet-buff" class="text-slate-400">30% 護盾防禦</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col gap-6">
+
+        <!-- Navigation Tabs -->
+        <nav class="flex justify-center bg-slate-800 p-1.5 rounded-xl border border-slate-700 text-sm font-medium">
+            <button onclick="switchTab('map')" id="tab-map" class="flex-1 py-2 px-3 rounded-lg text-center transition-all bg-indigo-600 text-white font-bold">🗺️ 冒險地圖</button>
+            <button onclick="switchTab('shop')" id="tab-shop" class="flex-1 py-2 px-3 rounded-lg text-center transition-all text-slate-400 hover:text-white">🛒 道具商店</button>
+            <button onclick="switchTab('srs')" id="tab-srs" class="flex-1 py-2 px-3 rounded-lg text-center transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1">
+                🧠 錯題魔窟 <span id="badge-srs" class="bg-red-500 text-white text-xs px-1.5 py-0.2 rounded-full hidden">0</span>
+            </button>
+            <button onclick="switchTab('custom')" id="tab-custom" class="flex-1 py-2 px-3 rounded-lg text-center transition-all text-slate-400 hover:text-white">📝 自訂單字</button>
+        </nav>
+
+        <!-- View 1: Map / Stages -->
+        <section id="view-map" class="flex flex-col gap-4">
+            <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-bold text-indigo-300">🗺️ 關卡選擇</h2>
+                    <p class="text-xs text-slate-400">按教材課次學習對應單字與文法 Boss 戰</p>
+                </div>
+                <button onclick="claimDailyReward()" id="btn-daily" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition-all shadow-md">
+                    <i class="fa-solid fa-gift"></i> 每日簽到
+                </button>
+            </div>
+
+            <!-- Stage Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="stage-grid">
+                <!-- Dynamically Generated -->
+            </div>
+        </section>
+
+        <!-- View 2: Battle View -->
+        <section id="view-battle" class="hidden flex-col gap-4">
+            <!-- Enemy Screen -->
+            <div class="relative bg-slate-800 rounded-2xl p-6 border border-slate-700 overflow-hidden flex flex-col items-center justify-between min-h-[260px] shadow-2xl">
+                <!-- Battle FX Overlay -->
+                <div id="battle-fx" class="absolute inset-0 pointer-events-none z-10 flex items-center justify-center"></div>
+                
+                <!-- Stage Header -->
+                <div class="w-full flex justify-between items-center text-xs text-slate-400 border-b border-slate-700/50 pb-2">
+                    <span id="battle-stage-title">第 0 課：五十音村</span>
+                    <span id="battle-mode-tag" class="bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded">聽力戰</span>
+                </div>
+
+                <!-- Enemy Sprite & HP -->
+                <div class="flex flex-col items-center gap-2 my-2 relative">
+                    <div id="enemy-avatar" class="text-7xl transition-transform duration-200">👹</div>
+                    <div class="text-center">
+                        <div id="enemy-name" class="font-bold text-slate-200 text-sm">50音怪魔</div>
+                        <div class="w-48 bg-slate-900 h-3 rounded-full border border-slate-700 overflow-hidden mt-1">
+                            <div id="enemy-hp-bar" class="bg-red-500 h-full w-full transition-all duration-300"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Question Prompt -->
+                <div class="w-full bg-slate-900/90 p-4 rounded-xl border border-slate-700 text-center relative">
+                    <button onclick="speakCurrentWord()" class="absolute right-3 top-3 text-slate-400 hover:text-indigo-400 text-lg transition-colors" title="收聽發音">
+                        <i class="fa-solid fa-volume-high"></i>
+                    </button>
+                    <div id="question-text" class="text-2xl font-bold text-amber-300 tracking-wider">あ</div>
+                    <div id="question-sub" class="text-xs text-slate-400 mt-1">請選擇對應的羅馬拼音或意思</div>
+                </div>
+            </div>
+
+            <!-- Options & Actions -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="options-grid">
+                <!-- Dynamically Generated Buttons -->
+            </div>
+
+            <div class="flex justify-between items-center mt-2">
+                <button onclick="switchTab('map')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-lg border border-slate-700 transition-all">
+                    ← 撤退逃跑
+                </button>
+                <div id="combo-display" class="text-xs font-bold text-amber-400 hidden">
+                    🔥 連擊 Combo x<span id="combo-count">0</span> (+<span id="combo-bonus">0</span>% 傷害)
+                </div>
+            </div>
+        </section>
+
+        <!-- View 3: Shop -->
+        <section id="view-shop" class="hidden flex-col gap-4">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <h2 class="text-lg font-bold text-amber-300">🛒 冒險公會裝備商店</h2>
+                <p class="text-xs text-slate-400 mt-0.5">購買裝備提升戰鬥力與獲得召喚獸 Buff</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="shop-items-grid">
+                <!-- Dynamically Generated Shop Items -->
+            </div>
+        </section>
+
+        <!-- View 4: SRS Custom / Review -->
+        <section id="view-custom" class="hidden flex-col gap-4">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <h2 class="text-lg font-bold text-indigo-300">📝 課本與自訂單字庫匯入</h2>
+                <p class="text-xs text-slate-400 mt-1">您可以隨時新增手邊教科書的單字或句型至遊戲中：</p>
+            </div>
+
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col gap-3">
+                <textarea id="custom-import-text" rows="5" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500" placeholder="格式範例 (每行一個單字)：&#10;こんにちは, konnichiwa, 你好&#10;ありがとう, arigatou, 謝謝"></textarea>
+                <button onclick="importCustomWords()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg text-xs transition-all align-self-end">
+                    匯入單字庫
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-slate-900 border-t border-slate-800 p-4 text-center text-xs text-slate-500">
+        日語 RPG 學習神作 · 艾賓浩斯記憶記憶法整合版
+    </footer>
+
+    <!-- Audio Synth API Script & Main Game Engine Code -->
+    <script>
+        // --- DATA STRUCTURES (Based on uploaded handouts) ---
+        const STAGES = [
+            { id: 0, title: "第 0 課：五十音新手村", desc: "平假名、片假名、濁音、拗音發音挑戰", icon: "🌱", boss: "五十音魔王", minLevel: 1 },
+            { id: 1, title: "第 1 課：自我介紹大樓", desc: "職業、國籍、～は～です 句型對話戰", icon: "🏢", boss: "公司高層 Boss", minLevel: 1 },
+            { id: 2, title: "第 2 課：隨身物品寶藏庫", desc: "指示代名詞 (これ/それ/あれ) 與隨身物品", icon: "📦", boss: "寶箱怪魔", minLevel: 2 },
+            { id: 3, title: "第 3 課：商業市集與算術", desc: "場所 (ここ/どこ) 與金額日圓算術", icon: "💰", boss: "黑心商人 Boss", minLevel: 3 },
+            { id: 4, title: "第 4 課：時時光神殿", desc: "時間 (何時何分)、星期與動詞時態 (～ます)", icon: "⏳", boss: "時間領主", minLevel: 4 },
+            { id: 5, title: "第 5 課：王都鐵道王國", desc: "交通工具、日期 (何月何日) 與往來動詞", icon: "🚆", boss: "鐵道大將軍", minLevel: 5 },
+            { id: 6, title: "第 6 課：日常與魔王城", desc: "日常動作 (～を標示)、邀請 (～ませんか)", icon: "🏰", boss: "終極語文魔王", minLevel: 6 }
+        ];
+
+        // Built-in Questions Data derived from Handouts
+        const VOCAB_DATA = [
+            // Stage 0: 50-音
+            { stage: 0, q: "あ", a: "a", options: ["a", "i", "u", "e"], type: "vocab" },
+            { stage: 0, q: "カ", a: "ka", options: ["ka", "ki", "ku", "ke"], type: "vocab" },
+            { stage: 0, q: "ガ", a: "ga", options: ["ga", "za", "da", "ba"], type: "vocab" },
+            { stage: 0, q: "きゃ", a: "kya", options: ["kya", "sha", "cha", "nya"], type: "vocab" },
+            // Stage 1
+            { stage: 1, q: "はい、わたしは［ ］です。", a: "マイク・ミラー", options: ["マイク・ミラー", "アメリカじん", "かいしゃいん", "がくせい"], type: "grammar" },
+            { stage: 1, q: "ぎんこういん", a: "銀行員", options: ["銀行員", "公司職員", "醫生", "研究員"], type: "vocab" },
+            // Stage 2
+            { stage: 2, q: "これは［ ］の かぎですか。", a: "なん", options: ["なん", "だれ", "どこ", "どれ"], type: "grammar" },
+            { stage: 2, q: "とけい", a: "鐘錶/手錶", options: ["鐘錶/手錶", "雨傘", "鑰匙", "公事包"], type: "vocab" },
+            // Stage 3
+            { stage: 3, q: "お手洗いは［ ］ですか。", a: "どこ", options: ["どこ", "なん", "だれ", "いつ"], type: "grammar" },
+            { stage: 3, q: "7,300円", a: "ななせんさんびゃくえん", options: ["ななせんさんびゃくえん", "ななせんさんひゃくえん", "ななじゅうさんひゃくえん", "しちせんさんえん"], type: "vocab" },
+            // Stage 4
+            { stage: 4, q: "今 9時［ ］です。", a: "15分 (じゅうごふん)", options: ["15分 (じゅうごふん)", "15分 (じゅうごぷん)", "15時", "15分 (じゅうごふ)"], type: "grammar" },
+            { stage: 4, q: "おきます", a: "起床", options: ["起床", "睡覺", "工作", "學習"], type: "vocab" },
+            // Stage 5
+            { stage: 5, q: "明日 どこ［ ］行きますか。", a: "へ", options: ["へ", "で", "と", "を"], type: "grammar" },
+            { stage: 5, q: "新幹線で 広島へ ［ ］。", a: "行きます", options: ["行きます", "来ます", "帰ります", "飲みます"], type: "grammar" },
+            // Stage 6
+            { stage: 6, q: "いっしょに 映画を ［ ］か。", a: "見ません", options: ["見ません", "見ましょう", "見ます", "見ました"], type: "grammar" },
+            { stage: 6, q: "スーパーで 野菜を ［ ］。", a: "買います", options: ["買います", "行きます", "会います", "聞きます"], type: "grammar" }
+        ];
+
+        // Game State
+        let player = {
+            level: 1,
+            exp: 0,
+            hp: 100,
+            maxHp: 100,
+            gold: 100,
+            pet: null,
+            srsList: [], // Wrong words
+            lastCheckIn: null
+        };
+
+        let currentBattle = {
+            stageId: 0,
+            enemyHp: 100,
+            enemyMaxHp: 100,
+            currentQ: null,
+            combo: 0
+        };
+
+        // --- GAME ENGINE LOGIC ---
+
+        function initGame() {
+            loadSavedData();
+            renderStages();
+            renderShop();
+            updateUI();
+        }
+
+        function switchTab(tabName) {
+            ['map', 'battle', 'shop', 'custom', 'srs'].forEach(t => {
+                const el = document.getElementById(`view-${t}`);
+                if (el) el.classList.add('hidden');
+                const tabBtn = document.getElementById(`tab-${t}`);
+                if (tabBtn) {
+                    tabBtn.classList.remove('bg-indigo-600', 'text-white', 'font-bold');
+                    tabBtn.classList.add('text-slate-400');
+                }
+            });
+
+            const targetView = document.getElementById(`view-${tabName}`);
+            if (targetView) targetView.classList.remove('hidden');
+
+            const targetBtn = document.getElementById(`tab-${tabName}`);
+            if (targetBtn) {
+                targetBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold');
+                targetBtn.classList.remove('text-slate-400');
+            }
+        }
+
+        function renderStages() {
+            const grid = document.getElementById('stage-grid');
+            grid.innerHTML = STAGES.map(s => `
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col justify-between hover:border-indigo-500 transition-all">
+                    <div class="flex items-start gap-3">
+                        <div class="text-3xl">${s.icon}</div>
+                        <div>
+                            <h3 class="font-bold text-slate-200">${s.title}</h3>
+                            <p class="text-xs text-slate-400 mt-1">${s.desc}</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-4 pt-3 border-t border-slate-700/50">
+                        <span class="text-xs text-slate-500">Boss: ${s.boss}</span>
+                        <button onclick="startBattle(${s.id})" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-1.5 rounded-lg transition-all">
+                            挑戰闖關
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function startBattle(stageId) {
+            currentBattle.stageId = stageId;
+            currentBattle.enemyMaxHp = 50 + stageId * 30;
+            currentBattle.enemyHp = currentBattle.enemyMaxHp;
+            currentBattle.combo = 0;
+
+            const stage = STAGES.find(s => s.id === stageId);
+            document.getElementById('battle-stage-title').innerText = stage ? stage.title : "戰鬥中";
+            document.getElementById('enemy-name').innerText = stage ? stage.boss : "魔物";
+            
+            switchTab('battle');
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            // Filter question for current stage or fallback
+            const filtered = VOCAB_DATA.filter(q => q.stage === currentBattle.stageId);
+            const pool = filtered.length > 0 ? filtered : VOCAB_DATA;
+            const q = pool[Math.floor(Math.random() * pool.length)];
+            
+            currentBattle.currentQ = q;
+
+            document.getElementById('question-text').innerText = q.q;
+            document.getElementById('question-sub').innerText = q.type === 'grammar' ? '請選擇正確填空答案' : '請選擇對應字義或假名';
+            
+            // Render options
+            const grid = document.getElementById('options-grid');
+            const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
+
+            grid.innerHTML = shuffledOptions.map(opt => `
+                <button onclick="submitAnswer('${opt}')" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-indigo-500 text-slate-200 font-bold p-3 rounded-xl text-sm transition-all text-left flex items-center justify-between">
+                    <span>${opt}</span>
+                    <i class="fa-solid fa-chevron-right text-slate-500 text-xs"></i>
+                </button>
+            `).join('');
+
+            updateBattleUI();
+        }
+
+        function submitAnswer(ans) {
+            const q = currentBattle.currentQ;
+            if (ans === q.a) {
+                // Correct
+                playAudioEffect(800, 0.1);
+                currentBattle.combo++;
+                const dmg = 25 + (currentBattle.combo * 5);
+                currentBattle.enemyHp = Math.max(0, currentBattle.enemyHp - dmg);
+
+                showFX(`💥 -${dmg}`, 'text-amber-400 font-bold text-2xl');
+
+                if (currentBattle.enemyHp <= 0) {
+                    // Win Battle
+                    player.gold += 30;
+                    player.exp += 40;
+                    checkLevelUp();
+                    alert(`🎉 戰鬥勝利！獲得 30 金幣與 40 EXP！`);
+                    switchTab('map');
+                } else {
+                    nextQuestion();
+                }
+            } else {
+                // Wrong
+                playAudioEffect(200, 0.2);
+                currentBattle.combo = 0;
+                player.hp = Math.max(0, player.hp - 15);
+                
+                // Add to SRS
+                if (!player.srsList.some(item => item.q === q.q)) {
+                    player.srsList.push(q);
+                }
+
+                showFX(`💔 -15 HP`, 'text-red-500 font-bold text-2xl');
+                document.getElementById('view-battle').classList.add('shake');
+                setTimeout(() => document.getElementById('view-battle').classList.remove('shake'), 300);
+
+                if (player.hp <= 0) {
+                    alert('☠️ 您已被擊敗！請至商店補充體力。');
+                    player.hp = player.maxHp;
+                    switchTab('map');
+                } else {
+                    nextQuestion();
+                }
+            }
+            updateUI();
+        }
+
+        function speakCurrentWord() {
+            if ('speechSynthesis' in window) {
+                const text = currentBattle.currentQ ? currentBattle.currentQ.q : '';
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'ja-JP';
+                window.speechSynthesis.speak(u);
+            }
+        }
+
+        function updateBattleUI() {
+            const enemyPct = (currentBattle.enemyHp / currentBattle.enemyMaxHp) * 100;
+            document.getElementById('enemy-hp-bar').style.width = `${enemyPct}%`;
+            
+            const comboEl = document.getElementById('combo-display');
+            if (currentBattle.combo > 1) {
+                comboEl.classList.remove('hidden');
+                document.getElementById('combo-count').innerText = currentBattle.combo;
+                document.getElementById('combo-bonus').innerText = currentBattle.combo * 5;
+            } else {
+                comboEl.classList.add('hidden');
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('player-hp').innerText = player.hp;
+            document.getElementById('player-max-hp').innerText = player.maxHp;
+            document.getElementById('player-gold').innerText = player.gold;
+            document.getElementById('player-level').innerText = player.level;
+            document.getElementById('srs-count').innerText = player.srsList.length;
+
+            const expPct = (player.exp % 100);
+            document.getElementById('player-exp-bar').style.width = `${expPct}%`;
+
+            saveData();
+        }
+
+        function checkLevelUp() {
+            const newLevel = Math.floor(player.exp / 100) + 1;
+            if (newLevel > player.level) {
+                player.level = newLevel;
+                player.maxHp += 20;
+                player.hp = player.maxHp;
+                alert(`✨ 恭喜升級至 Lv.${player.level}！最大生命值提升！`);
+            }
+        }
+
+        function showFX(text, colorClass) {
+            const fx = document.getElementById('battle-fx');
+            const el = document.createElement('div');
+            el.className = `damage-float absolute ${colorClass}`;
+            el.innerText = text;
+            fx.appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        function playAudioEffect(freq, duration) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                osc.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function renderShop() {
+            const shopItems = [
+                { id: 'potion', name: '生命藥水', price: 20, desc: '立即恢復 50 點 HP', icon: '🧪' },
+                { id: 'pet_dog', name: '召喚獸：柴犬', price: 150, desc: '戰鬥中有 30% 機率擋下傷害', icon: '🐕' }
+            ];
+
+            const grid = document.getElementById('shop-items-grid');
+            grid.innerHTML = shopItems.map(item => `
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="text-3xl">${item.icon}</div>
+                        <div>
+                            <div class="font-bold text-slate-200">${item.name}</div>
+                            <div class="text-xs text-slate-400 mt-0.5">${item.desc}</div>
+                        </div>
+                    </div>
+                    <button onclick="buyItem('${item.id}', ${item.price})" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-xs px-3 py-1.5 rounded-lg transition-all">
+                        💰 ${item.price}
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function buyItem(id, price) {
+            if (player.gold < price) {
+                alert('金幣不足！');
+                return;
+            }
+            player.gold -= price;
+            if (id === 'potion') {
+                player.hp = Math.min(player.maxHp, player.hp + 50);
+                alert('恢復了 50 點 HP！');
+            } else if (id === 'pet_dog') {
+                player.pet = { name: '柴犬夥伴', icon: '🐕' };
+                document.getElementById('active-pet').classList.remove('hidden');
+                alert('成功獲得柴犬夥伴！');
+            }
+            updateUI();
+        }
+
+        function claimDailyReward() {
+            const today = new Date().toDateString();
+            if (player.lastCheckIn === today) {
+                alert('今天已經領過簽到獎勵囉！明天再來吧！');
+            } else {
+                player.lastCheckIn = today;
+                player.gold += 50;
+                alert('🎉 簽到成功！獲得 50 金幣！');
+                updateUI();
+            }
+        }
+
+        function importCustomWords() {
+            const val = document.getElementById('custom-import-text').value.trim();
+            if (!val) return;
+            const lines = val.split('\n');
+            let added = 0;
+            lines.forEach(line => {
+                const parts = line.split(',');
+                if (parts.length >= 3) {
+                    VOCAB_DATA.push({
+                        stage: 0,
+                        q: parts[0].trim(),
+                        a: parts[2].trim(),
+                        options: [parts[2].trim(), '選項B', '選項C', '選項D'],
+                        type: 'vocab'
+                    });
+                    added++;
+                }
+            });
+            alert(`成功匯入 ${added} 個自訂單字！`);
+            document.getElementById('custom-import-text').value = '';
+        }
+
+        function saveData() {
+            localStorage.setItem('jp_rpg_save', JSON.stringify(player));
+        }
+
+        function loadSavedData() {
+            const data = localStorage.getItem('jp_rpg_save');
+            if (data) {
+                try {
+                    player = { ...player, ...JSON.parse(data) };
+                } catch(e) {}
+            }
+        }
+
+        // Initialize on load
+        window.onload = initGame;
+    </script>
+</body>
+</html>
